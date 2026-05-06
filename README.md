@@ -1,6 +1,6 @@
 # Demo Link
 
-(demo)[https://sensor-registry-ft3h.vercel.app/]
+[demo - mainnet](https://sensor-registry-ft3h.vercel.app/)
 
 # Integrations Disclaimer
 
