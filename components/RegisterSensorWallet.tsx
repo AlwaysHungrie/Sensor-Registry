@@ -1,84 +1,80 @@
 "use client";
 
-import { useState } from "react";
-import { useWallets } from "@privy-io/react-auth/solana";
-import { usePrivy } from "@privy-io/react-auth";
-import { createSensorToken, TOKEN_DECIMALS } from "@/lib/createSensorToken";
+import { useState, useEffect } from "react";
+
+type SensorToken = {
+  id: number;
+  name: string;
+  symbol: string;
+  mint_address: string;
+};
 
 type Status =
   | { type: "idle" }
   | { type: "loading" }
-  | { type: "success"; mintAddress: string; signature: string }
+  | { type: "success"; walletAddress: string }
   | { type: "error"; message: string };
 
 interface Props {
-  onCreated?: () => void;
+  onRegistered?: () => void;
 }
 
-export function CreateSensorForm({ onCreated }: Props) {
-  const { wallets } = useWallets();
-  const { user } = usePrivy();
-  const [name, setName] = useState("");
-  const [unit, setUnit] = useState("");
+function isValidSolanaAddress(addr: string) {
+  return /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(addr);
+}
+
+export function RegisterSensorWallet({ onRegistered }: Props) {
+  const [walletAddress, setWalletAddress] = useState("");
+  const [selectedMint, setSelectedMint] = useState("");
+  const [sensorTokens, setSensorTokens] = useState<SensorToken[]>([]);
   const [status, setStatus] = useState<Status>({ type: "idle" });
 
-  const wallet = wallets[0];
+  useEffect(() => {
+    fetch("/api/sensors")
+      .then((res) => (res.ok ? res.json() : []))
+      .then(setSensorTokens)
+      .catch(() => {});
+  }, []);
+
+  const selectedToken = sensorTokens.find((t) => t.mint_address === selectedMint);
+  const isLoading = status.type === "loading";
+  const canSubmit =
+    isValidSolanaAddress(walletAddress.trim()) &&
+    selectedMint.length > 0 &&
+    !isLoading;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!wallet || !name.trim() || !unit.trim()) return;
+    if (!canSubmit || !selectedToken) return;
 
     setStatus({ type: "loading" });
     try {
-      const result = await createSensorToken(wallet, {
-        name: name.trim(),
-        symbol: unit.trim(),
-      });
-
-      await fetch("/api/sensors", {
+      const res = await fetch("/api/wallets", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: name.trim(),
-          symbol: unit.trim(),
-          mintAddress: result.mintAddress,
-          signature: result.signature,
-          ownerAddress: user?.wallet?.address ?? wallet.address,
+          walletAddress: walletAddress.trim(),
+          unitSymbol: selectedToken.symbol,
+          mintAddress: selectedToken.mint_address,
         }),
       });
 
-      setStatus({ type: "success", ...result });
-      setName("");
-      setUnit("");
-      onCreated?.();
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error ?? "Registration failed");
+      }
+
+      setStatus({ type: "success", walletAddress: walletAddress.trim() });
+      setWalletAddress("");
+      setSelectedMint("");
+      onRegistered?.();
     } catch (err) {
       setStatus({
         type: "error",
-        message: err instanceof Error ? err.message : "Transaction failed",
+        message: err instanceof Error ? err.message : "Registration failed",
       });
     }
   }
-
-  function handleUnitChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const raw = e.target.value.replace(/[^A-Z0-9]/g, "").slice(0, 6);
-    setUnit(raw);
-  }
-
-  function handleUnitKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
-    const allowed = /^[A-Z0-9]$/;
-    if (
-      e.key.length === 1 &&
-      !allowed.test(e.key.toUpperCase()) &&
-      !e.metaKey &&
-      !e.ctrlKey
-    ) {
-      e.preventDefault();
-    }
-  }
-
-  const isLoading = status.type === "loading";
-  const canSubmit =
-    !!wallet && name.trim().length > 0 && unit.trim().length > 0 && !isLoading;
 
   return (
     <section className="px-8 pt-0 pb-16">
@@ -86,7 +82,7 @@ export function CreateSensorForm({ onCreated }: Props) {
         className="text-xs tracking-widest uppercase mb-4"
         style={{ color: "var(--text-muted)", letterSpacing: "0.15em" }}
       >
-        Create Sensor Token
+        Register Sensor Wallet
       </p>
 
       <form onSubmit={handleSubmit}>
@@ -100,7 +96,6 @@ export function CreateSensorForm({ onCreated }: Props) {
             maxWidth: "640px",
           }}
         >
-          {/* Sensor Name */}
           <div style={{ borderRight: "1px solid var(--border)" }}>
             <label
               style={{
@@ -112,13 +107,13 @@ export function CreateSensorForm({ onCreated }: Props) {
                 padding: "10px 16px 4px",
               }}
             >
-              Sensor Name
+              Wallet Address
             </label>
             <input
               type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Urban Air Quality Node"
+              value={walletAddress}
+              onChange={(e) => setWalletAddress(e.target.value)}
+              placeholder="Solana wallet address"
               disabled={isLoading}
               style={{
                 display: "block",
@@ -129,16 +124,15 @@ export function CreateSensorForm({ onCreated }: Props) {
                 padding: "0 16px 10px",
                 fontSize: "14px",
                 color: "var(--text-primary)",
-                fontFamily: "inherit",
+                fontFamily: "monospace",
               }}
             />
           </div>
 
-          {/* Unit Symbol */}
           <div
             style={{
               borderRight: "1px solid var(--border)",
-              minWidth: "100px",
+              minWidth: "160px",
             }}
           >
             <label
@@ -151,16 +145,12 @@ export function CreateSensorForm({ onCreated }: Props) {
                 padding: "10px 16px 4px",
               }}
             >
-              Unit
+              Unit Token
             </label>
-            <input
-              type="text"
-              value={unit}
-              onChange={handleUnitChange}
-              onKeyDown={handleUnitKeyDown}
-              placeholder="PPM"
-              maxLength={6}
-              disabled={isLoading}
+            <select
+              value={selectedMint}
+              onChange={(e) => setSelectedMint(e.target.value)}
+              disabled={isLoading || sensorTokens.length === 0}
               style={{
                 display: "block",
                 width: "100%",
@@ -169,15 +159,23 @@ export function CreateSensorForm({ onCreated }: Props) {
                 outline: "none",
                 padding: "0 16px 10px",
                 fontSize: "14px",
-                color: "var(--text-primary)",
+                color: selectedMint ? "var(--text-primary)" : "var(--text-muted)",
                 fontFamily: "inherit",
-                fontVariantNumeric: "tabular-nums",
-                letterSpacing: "0.05em",
+                cursor: "pointer",
+                appearance: "none",
               }}
-            />
+            >
+              <option value="" disabled>
+                {sensorTokens.length === 0 ? "No tokens yet" : "Select"}
+              </option>
+              {sensorTokens.map((t) => (
+                <option key={t.mint_address} value={t.mint_address}>
+                  {t.symbol} — {t.name}
+                </option>
+              ))}
+            </select>
           </div>
 
-          {/* Submit */}
           <button
             type="submit"
             disabled={!canSubmit}
@@ -195,19 +193,9 @@ export function CreateSensorForm({ onCreated }: Props) {
               fontFamily: "inherit",
             }}
           >
-            {isLoading ? "Creating…" : "Create →"}
+            {isLoading ? "Registering…" : "Register →"}
           </button>
         </div>
-
-        <p
-          style={{
-            marginTop: "8px",
-            fontSize: "11px",
-            color: "var(--text-muted)",
-          }}
-        >
-          {TOKEN_DECIMALS} decimals · infinite supply · creator-controlled
-        </p>
       </form>
 
       {status.type === "success" && (
@@ -229,28 +217,16 @@ export function CreateSensorForm({ onCreated }: Props) {
               marginBottom: "8px",
             }}
           >
-            Token Created
+            Wallet Registered
           </p>
           <p
             style={{
               fontSize: "13px",
               color: "var(--text-primary)",
               wordBreak: "break-all",
-              marginBottom: "4px",
             }}
           >
-            <span style={{ color: "var(--text-muted)" }}>Mint: </span>
-            {status.mintAddress}
-          </p>
-          <p
-            style={{
-              fontSize: "11px",
-              color: "var(--text-secondary)",
-              wordBreak: "break-all",
-            }}
-          >
-            <span style={{ color: "var(--text-muted)" }}>Tx: </span>
-            {status.signature}
+            {status.walletAddress}
           </p>
         </div>
       )}

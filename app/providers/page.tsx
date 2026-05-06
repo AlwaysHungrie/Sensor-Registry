@@ -3,19 +3,21 @@
 import { useState, useEffect, useCallback } from "react";
 import { usePrivy } from "@privy-io/react-auth";
 import { useWallets } from "@privy-io/react-auth/solana";
-import { RegisterSensorWallet } from "@/components/RegisterSensorWallet";
-import { burnTokens } from "@/lib/createSensorToken";
+import { CreateSensorForm } from "@/components/CreateSensorForm";
+import { mintTokens } from "@/lib/createSensorToken";
 import Link from "next/link";
 
-type SensorWallet = {
+type Sensor = {
   id: number;
-  wallet_address: string;
-  unit_symbol: string;
+  name: string;
+  symbol: string;
   mint_address: string;
-  registered_at: string;
+  signature: string;
+  owner_address: string;
+  created_at: string;
 };
 
-type BurnStatus =
+type MintStatus =
   | { type: "idle" }
   | { type: "loading" }
   | { type: "success"; signature: string }
@@ -25,31 +27,39 @@ function shortAddress(addr: string) {
   return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
 }
 
-function BurnForm({ sensorWallet }: { sensorWallet: SensorWallet }) {
-  const { wallets } = useWallets();
+function MintTokensForm({
+  sensor,
+  wallet,
+}: {
+  sensor: Sensor;
+  wallet: ReturnType<typeof useWallets>["wallets"][number];
+}) {
+  const [recipient, setRecipient] = useState("");
   const [amount, setAmount] = useState("");
-  const [status, setStatus] = useState<BurnStatus>({ type: "idle" });
+  const [status, setStatus] = useState<MintStatus>({ type: "idle" });
 
-  const wallet = wallets[0];
   const isLoading = status.type === "loading";
-  const canSubmit = Number(amount) > 0 && !isLoading && !!wallet;
+  const canSubmit =
+    recipient.trim().length > 0 && Number(amount) > 0 && !isLoading;
 
-  async function handleBurn(e: React.FormEvent) {
+  async function handleMint(e: React.FormEvent) {
     e.preventDefault();
-    if (!canSubmit || !wallet) return;
+    if (!canSubmit) return;
     setStatus({ type: "loading" });
     try {
-      const result = await burnTokens(
+      const result = await mintTokens(
         wallet,
-        sensorWallet.mint_address,
+        sensor.mint_address,
+        recipient.trim(),
         Number(amount),
       );
       setStatus({ type: "success", signature: result.signature });
+      setRecipient("");
       setAmount("");
     } catch (err) {
       setStatus({
         type: "error",
-        message: err instanceof Error ? err.message : "Burn failed",
+        message: err instanceof Error ? err.message : "Transaction failed",
       });
     }
   }
@@ -72,13 +82,13 @@ function BurnForm({ sensorWallet }: { sensorWallet: SensorWallet }) {
           marginBottom: "10px",
         }}
       >
-        Burn Tokens
+        Mint to Sensor Wallet
       </p>
-      <form onSubmit={handleBurn}>
+      <form onSubmit={handleMint}>
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "1fr auto",
+            gridTemplateColumns: "auto 1fr auto",
             border: "1px solid var(--border)",
             background: "var(--bg)",
           }}
@@ -94,7 +104,44 @@ function BurnForm({ sensorWallet }: { sensorWallet: SensorWallet }) {
                 padding: "6px 10px 2px",
               }}
             >
-              Amount ({sensorWallet.unit_symbol})
+              Recipient
+            </label>
+            <input
+              type="text"
+              value={recipient}
+              onChange={(e) => setRecipient(e.target.value)}
+              placeholder="Wallet address"
+              disabled={isLoading}
+              style={{
+                display: "block",
+                width: "100%",
+                background: "none",
+                border: "none",
+                outline: "none",
+                padding: "0 10px 6px",
+                fontSize: "12px",
+                color: "var(--text-primary)",
+                fontFamily: "monospace",
+              }}
+            />
+          </div>
+          <div
+            style={{
+              borderRight: "1px solid var(--border)",
+              minWidth: "80px",
+            }}
+          >
+            <label
+              style={{
+                display: "block",
+                fontSize: "9px",
+                letterSpacing: "0.12em",
+                color: "var(--text-muted)",
+                textTransform: "uppercase",
+                padding: "6px 10px 2px",
+              }}
+            >
+              Amount
             </label>
             <input
               type="number"
@@ -121,9 +168,9 @@ function BurnForm({ sensorWallet }: { sensorWallet: SensorWallet }) {
             disabled={!canSubmit}
             style={{
               padding: "0 16px",
-              background: canSubmit ? "#c0392b" : "transparent",
+              background: canSubmit ? "var(--text-primary)" : "transparent",
               border: "none",
-              color: canSubmit ? "#fff" : "var(--text-muted)",
+              color: canSubmit ? "var(--bg)" : "var(--text-muted)",
               fontSize: "10px",
               letterSpacing: "0.1em",
               textTransform: "uppercase",
@@ -133,7 +180,7 @@ function BurnForm({ sensorWallet }: { sensorWallet: SensorWallet }) {
               fontFamily: "inherit",
             }}
           >
-            {isLoading ? "…" : "Burn"}
+            {isLoading ? "…" : "Mint →"}
           </button>
         </div>
       </form>
@@ -144,9 +191,10 @@ function BurnForm({ sensorWallet }: { sensorWallet: SensorWallet }) {
             marginTop: "6px",
             fontSize: "10px",
             color: "var(--text-secondary)",
+            wordBreak: "break-all",
           }}
         >
-          Burned ·{" "}
+          Minted ·{" "}
           <a
             href={`https://explorer.solana.com/tx/${status.signature}?cluster=devnet`}
             target="_blank"
@@ -167,20 +215,21 @@ function BurnForm({ sensorWallet }: { sensorWallet: SensorWallet }) {
   );
 }
 
-export default function MarketplacePage() {
+export default function Home() {
   const { ready, authenticated, login, logout, user } = usePrivy();
   const { wallets } = useWallets();
-  const [sensorWallets, setSensorWallets] = useState<SensorWallet[]>([]);
+  const [sensors, setSensors] = useState<Sensor[]>([]);
 
   const walletAddress = user?.wallet?.address;
   const shortWallet = walletAddress ? shortAddress(walletAddress) : null;
+  const connectedWallet = wallets[0];
 
-  const fetchWallets = useCallback(async () => {
+  const fetchSensors = useCallback(async () => {
     try {
-      const res = await fetch("/api/wallets");
+      const res = await fetch("/api/sensors");
       if (res.ok) {
         const data = await res.json();
-        setSensorWallets(data);
+        setSensors(data);
       }
     } catch {
       // silent
@@ -188,9 +237,13 @@ export default function MarketplacePage() {
   }, []);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    fetchWallets();
-  }, [fetchWallets]);
+    fetch("/api/sensors")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data) setSensors(data);
+      })
+      .catch(() => {});
+  }, []);
 
   return (
     <div className="min-h-screen" style={{ background: "var(--bg)" }}>
@@ -214,11 +267,9 @@ export default function MarketplacePage() {
               href="/"
               className="text-xs tracking-widest uppercase"
               style={{
-                color: "var(--text-primary)",
+                color: "var(--text-muted)",
                 letterSpacing: "0.12em",
                 textDecoration: "none",
-                borderBottom: "1px solid var(--text-primary)",
-                paddingBottom: "1px",
               }}
             >
               Marketplace
@@ -227,9 +278,11 @@ export default function MarketplacePage() {
               href="/providers"
               className="text-xs tracking-widest uppercase"
               style={{
-                color: "var(--text-muted)",
+                color: "var(--text-primary)",
                 letterSpacing: "0.12em",
                 textDecoration: "none",
+                borderBottom: "1px solid var(--text-primary)",
+                paddingBottom: "1px",
               }}
             >
               For Providers
@@ -266,15 +319,18 @@ export default function MarketplacePage() {
           className="text-xs tracking-widest uppercase mb-8"
           style={{ color: "var(--text-muted)", letterSpacing: "0.2em" }}
         >
-          Sensor Marketplace
+          For Sensor Providers
         </p>
         <h1
           className="text-5xl font-light leading-tight"
-          style={{ color: "var(--text-primary)", letterSpacing: "-0.02em" }}
+          style={{
+            color: "var(--text-primary)",
+            letterSpacing: "-0.02em",
+          }}
         >
-          Autonomous Sensors on Tumbuh,
+          Real-world sensors,
           <br />
-          report plant data onchain.
+          that power our Autonomous Plants.
         </h1>
         <ul
           className="mt-6 text-base flex flex-col gap-6"
@@ -285,19 +341,25 @@ export default function MarketplacePage() {
           }}
         >
           <li>
-            Sensor providers manufacture sensors with a private wallet. Once
-            registered, sensors burn Unit Tokens to submit readings onchain.
+            Autonomous Sensors on Tumbuh emit onchain data by regularly burning
+            Unit Tokens. Unit Tokens are controlled and sold by sensor providers
+            to the autonomous sensor wallets to let them work.
           </li>
           <li>
-            Each sensor wallet is tied to a unit type — the token it will burn
-            when reporting data. You can also track a sensor using our favourite
-            tool.
+            As a sensor provider, you have complete control over distribution of
+            your sensor units and are responsible for ensuring your sensor
+            wallets have enough Unit Tokens to report data.
+          </li>
+          <li>
+            You need to ensure the sensor has a wallet and when it wants to
+            report a new reading, it does so by burning that amount of Unit
+            Tokens.
           </li>
         </ul>
       </section>
 
-      {/* Register Form */}
-      {authenticated && <RegisterSensorWallet onRegistered={fetchWallets} />}
+      {/* Create Sensor Token Form */}
+      {authenticated && <CreateSensorForm onCreated={fetchSensors} />}
 
       {/* Divider */}
       <div
@@ -315,16 +377,16 @@ export default function MarketplacePage() {
             className="text-xs tracking-widest uppercase"
             style={{ color: "var(--text-muted)", letterSpacing: "0.15em" }}
           >
-            {sensorWallets.length} Registered Sensors
+            {sensors.length} Sensor Unit Tokens
           </p>
           <p className="text-xs" style={{ color: "var(--text-muted)" }}>
             Mainnet
           </p>
         </div>
 
-        {sensorWallets.length === 0 ? (
+        {sensors.length === 0 ? (
           <p className="text-sm" style={{ color: "var(--text-muted)" }}>
-            No sensors registered yet.
+            No sensors yet.
           </p>
         ) : (
           <div
@@ -334,19 +396,21 @@ export default function MarketplacePage() {
               background: "var(--border)",
             }}
           >
-            {sensorWallets.map((sw) => {
-              const isConnected =
+            {sensors.map((s) => {
+              const isOwner =
                 authenticated &&
                 walletAddress &&
-                sw.wallet_address.toLowerCase() === walletAddress.toLowerCase();
+                s.owner_address.toLowerCase() === walletAddress.toLowerCase();
 
               return (
                 <div
-                  key={sw.id}
+                  key={s.id}
+                  className="group"
                   style={{
                     background: "var(--bg-card)",
                     padding: "28px 24px",
                     transition: "background 0.15s",
+                    cursor: isOwner ? "default" : "pointer",
                   }}
                   onMouseEnter={(e) =>
                     (e.currentTarget.style.background = "#FFFFFF")
@@ -358,65 +422,63 @@ export default function MarketplacePage() {
                   <div className="flex items-start justify-between mb-6">
                     <div>
                       <p
-                        className="text-base font-medium mb-1 font-mono"
+                        className="text-base font-medium mb-1"
                         style={{
                           color: "var(--text-primary)",
                           lineHeight: "1.4",
                         }}
                       >
-                        {shortAddress(sw.wallet_address)}
+                        {s.name}
                       </p>
                       <p
-                        className="text-xs font-mono"
-                        style={{
-                          color: "var(--text-muted)",
-                          wordBreak: "break-all",
-                        }}
+                        className="text-sm mb-6 font-mono"
+                        style={{ color: "var(--text-secondary)" }}
                       >
-                        {sw.wallet_address}
+                        {shortAddress(s.mint_address)}
                       </p>
                     </div>
+
                     <span
                       className="text-xs tracking-widest uppercase"
-                      style={{
-                        color: "var(--text-muted)",
-                        whiteSpace: "nowrap",
-                        marginLeft: "12px",
-                      }}
+                      style={{ color: "var(--text-muted)" }}
                     >
-                      Track →
+                      {s.symbol}
                     </span>
                   </div>
-
                   <div className="flex items-end justify-between">
                     <div>
                       <p
                         className="text-xs mb-0.5"
                         style={{ color: "var(--text-muted)" }}
                       >
-                        Registered
+                        Created
                       </p>
                       <p
                         className="text-sm"
                         style={{ color: "var(--text-secondary)" }}
                       >
-                        {new Date(sw.registered_at).toLocaleDateString()}
+                        {new Date(s.created_at).toLocaleDateString()}
                       </p>
                     </div>
-                    {isConnected && (
-                      <span
-                        className="text-xs tracking-widest uppercase"
-                        style={{
-                          color: "var(--text-secondary)",
-                          letterSpacing: "0.1em",
-                        }}
-                      >
-                        {sw.unit_symbol} Sensor
-                      </span>
-                    )}
+                    <a
+                      href={`https://explorer.solana.com/tx/${s.signature}?cluster=devnet`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      style={{
+                        fontSize: "11px",
+                        color: "var(--text-muted)",
+                        textDecoration: "none",
+                        letterSpacing: "0.05em",
+                      }}
+                    >
+                      Tx →
+                    </a>
                   </div>
 
-                  {isConnected && wallets[0] && <BurnForm sensorWallet={sw} />}
+                  {isOwner && connectedWallet && (
+                    <MintTokensForm sensor={s} wallet={connectedWallet} />
+                  )}
                 </div>
               );
             })}

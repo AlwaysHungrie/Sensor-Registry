@@ -9,12 +9,17 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@metaplex-foundation/mpl-token-metadata": "^3.4.0",
+    "@metaplex-foundation/umi": "^1.5.1",
+    "@metaplex-foundation/umi-bundle-defaults": "^1.5.1",
     "@privy-io/react-auth": "^3.23.1",
     "@solana-program/memo": "^0.11.0",
     "@solana-program/system": "^0.12.0",
     "@solana-program/token": "^0.13.0",
     "@solana/kit": "^6.8.0",
+    "bs58": "^6.0.0",
     "next": "16.2.4",
+    "postgres": "^3.4.9",
     "react": "19.2.4",
     "react-dom": "19.2.4"
   },
