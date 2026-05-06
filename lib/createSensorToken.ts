@@ -22,7 +22,7 @@ import {
   findAssociatedTokenPda,
   TOKEN_PROGRAM_ADDRESS,
 } from "@solana-program/token";
-import type { ConnectedStandardSolanaWallet } from "@privy-io/js-sdk-core";
+import type { ConnectedStandardSolanaWallet } from "@privy-io/react-auth/solana";
 import { createUmi } from "@metaplex-foundation/umi-bundle-defaults";
 import {
   createMetadataAccountV3,
