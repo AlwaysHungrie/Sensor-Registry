@@ -1,0 +1,3 @@
+[submodule "eitherway-birdeye-sensor-tracker"]
+	path = eitherway-birdeye-sensor-tracker
+	url = https://github.com/AlwaysHungrie/eitherway-birdeye-sensor-tracker
