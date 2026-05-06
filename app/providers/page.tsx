@@ -196,7 +196,7 @@ function MintTokensForm({
         >
           Minted ·{" "}
           <a
-            href={`https://explorer.solana.com/tx/${status.signature}?cluster=devnet`}
+            href={`https://explorer.solana.com/tx/${status.signature}`}
             target="_blank"
             rel="noopener noreferrer"
             style={{ color: "var(--text-muted)", textDecoration: "none" }}
@@ -461,7 +461,7 @@ export default function Home() {
                       </p>
                     </div>
                     <a
-                      href={`https://explorer.solana.com/tx/${s.signature}?cluster=devnet`}
+                      href={`https://explorer.solana.com/tx/${s.signature}`}
                       target="_blank"
                       rel="noopener noreferrer"
                       onClick={(e) => e.stopPropagation()}

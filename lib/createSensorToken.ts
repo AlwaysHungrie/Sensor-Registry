@@ -37,8 +37,8 @@ import {
 import bs58 from "bs58";
 
 export const TOKEN_DECIMALS = 9;
-const DEVNET_RPC = "https://api.devnet.solana.com";
-const SOLANA_DEVNET_CHAIN = "solana:devnet" as const;
+const MAINNET_RPC = process.env.NEXT_PUBLIC_HELIUS_RPC!;
+const SOLANA_MAINNET_CHAIN = "solana:mainnet" as const;
 
 export type SensorTokenMetadata = {
   name: string;
@@ -64,7 +64,7 @@ export async function burnTokens(
   mintAddress: string,
   amount: number
 ): Promise<BurnTokensResult> {
-  const rpc = createSolanaRpc(DEVNET_RPC as `https://${string}`);
+  const rpc = createSolanaRpc(MAINNET_RPC as `https://${string}`);
 
   const { value: latestBlockhash } = await rpc
     .getLatestBlockhash({ commitment: "confirmed" })
@@ -102,7 +102,7 @@ export async function burnTokens(
 
   const result = await wallet.signAndSendTransaction({
     transaction: txBytes as Uint8Array,
-    chain: SOLANA_DEVNET_CHAIN,
+    chain: SOLANA_MAINNET_CHAIN,
   });
 
   return { signature: bs58.encode(result.signature) };
@@ -114,7 +114,7 @@ export async function mintTokens(
   recipientAddress: string,
   amount: number
 ): Promise<MintTokensResult> {
-  const rpc = createSolanaRpc(DEVNET_RPC as `https://${string}`);
+  const rpc = createSolanaRpc(MAINNET_RPC as `https://${string}`);
 
   const { value: latestBlockhash } = await rpc
     .getLatestBlockhash({ commitment: "confirmed" })
@@ -157,7 +157,7 @@ export async function mintTokens(
 
   const result = await wallet.signAndSendTransaction({
     transaction: txBytes as Uint8Array,
-    chain: SOLANA_DEVNET_CHAIN,
+    chain: SOLANA_MAINNET_CHAIN,
   });
 
   return { signature: bs58.encode(result.signature) };
@@ -167,7 +167,7 @@ export async function createSensorToken(
   wallet: ConnectedStandardSolanaWallet,
   metadata: SensorTokenMetadata = { name: "Sensor Token", symbol: "SNSR" }
 ): Promise<CreateSensorTokenResult> {
-  const rpc = createSolanaRpc(DEVNET_RPC as `https://${string}`);
+  const rpc = createSolanaRpc(MAINNET_RPC as `https://${string}`);
 
   const { value: latestBlockhash } = await rpc
     .getLatestBlockhash({ commitment: "confirmed" })
@@ -192,7 +192,7 @@ export async function createSensorToken(
     .map((p) => p.instruction);
 
   // --- Metaplex metadata instruction via UMI ---
-  const umi = createUmi(DEVNET_RPC);
+  const umi = createUmi(MAINNET_RPC);
   const walletUmiSigner = umiCreateNoopSigner(umiPublicKey(wallet.address));
   umi.use(signerIdentity(walletUmiSigner));
 
@@ -251,7 +251,7 @@ export async function createSensorToken(
 
   const result = await wallet.signAndSendTransaction({
     transaction: txBytes as Uint8Array,
-    chain: SOLANA_DEVNET_CHAIN,
+    chain: SOLANA_MAINNET_CHAIN,
   });
 
   // Signature is raw bytes → base58 for Solana explorer

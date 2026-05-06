@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { usePrivy } from "@privy-io/react-auth";
 import { useWallets } from "@privy-io/react-auth/solana";
 import { RegisterSensorWallet } from "@/components/RegisterSensorWallet";
@@ -20,6 +20,312 @@ type BurnStatus =
   | { type: "loading" }
   | { type: "success"; signature: string }
   | { type: "error"; message: string };
+
+type BurnTx = {
+  signature: string;
+  block_time: number;
+  fee: number;
+  burned: number | null;
+};
+
+type TrackDialogProps = {
+  sensorWallet: SensorWallet;
+  onClose: () => void;
+};
+
+function TrackDialog({ sensorWallet, onClose }: TrackDialogProps) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const [txs, setTxs] = useState<BurnTx[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [nextOffset, setNextOffset] = useState<string | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
+
+  type RawTx = {
+    block_time: number;
+    raw_transaction: {
+      meta: {
+        fee?: number;
+        logMessages?: string[];
+        preTokenBalances?: Array<{ mint: string }>;
+        postTokenBalances?: Array<{
+          mint: string;
+          uiTokenAmount: { uiAmount: number | null };
+        }>;
+      };
+      transaction: { message: { accountKeys: string[] }; signatures: string[] };
+    };
+  };
+
+  function extractBurns(transactions: RawTx[]): BurnTx[] {
+    return transactions
+      .filter((t) => {
+        const logs = t.raw_transaction.meta.logMessages ?? [];
+        const isBurn = logs.some((l) => l.includes("Instruction: Burn"));
+        const mintMatch = [
+          ...(t.raw_transaction.meta.preTokenBalances ?? []),
+          ...(t.raw_transaction.meta.postTokenBalances ?? []),
+        ].some((b) => b.mint === sensorWallet.mint_address);
+        return isBurn && mintMatch;
+      })
+      .map((t) => {
+        const pre = t.raw_transaction.meta.preTokenBalances?.find(
+          (b) => b.mint === sensorWallet.mint_address,
+        );
+        const post = t.raw_transaction.meta.postTokenBalances?.find(
+          (b) => b.mint === sensorWallet.mint_address,
+        );
+        const preAmt =
+          (pre as { uiTokenAmount?: { uiAmount: number | null } }).uiTokenAmount
+            ?.uiAmount ?? 0;
+        const postAmt = post?.uiTokenAmount.uiAmount ?? 0;
+        const burned = pre && post ? preAmt - postAmt : null;
+        return {
+          signature: t.raw_transaction.transaction.signatures[0] ?? "",
+          block_time: t.block_time ?? 0,
+          fee: t.raw_transaction.meta.fee ?? 0,
+          burned,
+        };
+      });
+  }
+
+  async function fetchTxs(offset?: string) {
+    const url = new URL("/api/transactions", window.location.origin);
+    url.searchParams.set("address", sensorWallet.wallet_address);
+    url.searchParams.set("limit", "20");
+    if (offset) url.searchParams.set("offset", offset);
+
+    const res = await fetch(url.toString());
+    if (!res.ok) throw new Error(`API error ${res.status}`);
+    return res.json() as Promise<{
+      next_offset?: string;
+      transactions: RawTx[];
+    }>;
+  }
+
+  useEffect(() => {
+    fetchTxs()
+      .then((data) => {
+        console.log("data", data);
+        setTxs(extractBurns(data.transactions));
+        setNextOffset(data.next_offset ?? null);
+      })
+      .catch((e: unknown) =>
+        setError(e instanceof Error ? e.message : "Failed to fetch"),
+      )
+      .finally(() => setLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sensorWallet.wallet_address]);
+
+  async function handleLoadMore() {
+    if (!nextOffset) return;
+    setLoadingMore(true);
+    try {
+      const data = await fetchTxs(nextOffset);
+      setTxs((prev) => [...prev, ...extractBurns(data.transactions)]);
+      setNextOffset(data.next_offset ?? null);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Failed to fetch");
+    } finally {
+      setLoadingMore(false);
+    }
+  }
+
+  return (
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 100,
+        background: "rgba(0,0,0,0.55)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+      }}
+      onClick={onClose}
+    >
+      <div
+        ref={dialogRef}
+        style={{
+          background: "var(--bg)",
+          border: "1px solid var(--border)",
+          width: "min(640px, 94vw)",
+          maxHeight: "80vh",
+          display: "flex",
+          flexDirection: "column",
+          overflow: "hidden",
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div
+          style={{
+            padding: "20px 24px",
+            borderBottom: "1px solid var(--border)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+          }}
+        >
+          <div>
+            <p
+              style={{
+                fontSize: "10px",
+                letterSpacing: "0.15em",
+                textTransform: "uppercase",
+                color: "var(--text-muted)",
+                marginBottom: "4px",
+              }}
+            >
+              Burn Transactions · {sensorWallet.unit_symbol}
+            </p>
+            <p
+              style={{
+                fontSize: "12px",
+                fontFamily: "monospace",
+                color: "var(--text-secondary)",
+              }}
+            >
+              {sensorWallet.wallet_address}
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            style={{
+              background: "none",
+              border: "none",
+              cursor: "pointer",
+              color: "var(--text-muted)",
+              fontSize: "18px",
+              lineHeight: 1,
+              padding: "0 0 0 16px",
+            }}
+          >
+            ×
+          </button>
+        </div>
+
+        {/* Body */}
+        <div style={{ overflowY: "auto", flex: 1, padding: "0" }}>
+          {loading && (
+            <p
+              style={{
+                padding: "32px 24px",
+                fontSize: "12px",
+                color: "var(--text-muted)",
+              }}
+            >
+              Loading…
+            </p>
+          )}
+          {error && (
+            <p
+              style={{
+                padding: "32px 24px",
+                fontSize: "12px",
+                color: "#c0392b",
+              }}
+            >
+              {error}
+            </p>
+          )}
+          {!loading && !error && txs.length === 0 && (
+            <p
+              style={{
+                padding: "32px 24px",
+                fontSize: "12px",
+                color: "var(--text-muted)",
+              }}
+            >
+              No burn transactions found.
+            </p>
+          )}
+          {txs.map((tx, i) => (
+            <div
+              key={tx.signature || i}
+              style={{
+                padding: "14px 24px",
+                borderBottom: "1px solid var(--border)",
+                display: "grid",
+                gridTemplateColumns: "1fr auto",
+                gap: "8px",
+                alignItems: "center",
+              }}
+            >
+              <div>
+                <p
+                  style={{
+                    fontSize: "11px",
+                    fontFamily: "monospace",
+                    color: "var(--text-primary)",
+                    marginBottom: "3px",
+                    wordBreak: "break-all",
+                  }}
+                >
+                  (
+                  {tx.block_time
+                    ? new Date(tx.block_time / 1000).toLocaleString()
+                    : "—"}
+                  ){" "}
+                  {tx.burned != null
+                    ? `${tx.burned * 100}% ${sensorWallet.unit_symbol}`
+                    : ""}
+                </p>
+                <p style={{ fontSize: "10px", color: "var(--text-muted)" }}>
+                  {shortAddress(tx.signature)}
+                </p>
+              </div>
+              <a
+                href={`https://explorer.solana.com/tx/${tx.signature}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  fontSize: "10px",
+                  color: "var(--text-muted)",
+                  textDecoration: "none",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                View →
+              </a>
+            </div>
+          ))}
+        </div>
+
+        {/* Load more */}
+        {nextOffset && !loading && (
+          <div
+            style={{
+              padding: "16px 24px",
+              borderTop: "1px solid var(--border)",
+            }}
+          >
+            <button
+              onClick={handleLoadMore}
+              disabled={loadingMore}
+              style={{
+                background: "none",
+                border: "1px solid var(--border)",
+                color: loadingMore
+                  ? "var(--text-muted)"
+                  : "var(--text-primary)",
+                fontSize: "10px",
+                letterSpacing: "0.12em",
+                textTransform: "uppercase",
+                padding: "8px 16px",
+                cursor: loadingMore ? "default" : "pointer",
+                fontFamily: "inherit",
+                width: "100%",
+              }}
+            >
+              {loadingMore ? "Loading…" : "Load More"}
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 function shortAddress(addr: string) {
   return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
@@ -148,7 +454,7 @@ function BurnForm({ sensorWallet }: { sensorWallet: SensorWallet }) {
         >
           Burned ·{" "}
           <a
-            href={`https://explorer.solana.com/tx/${status.signature}?cluster=devnet`}
+            href={`https://explorer.solana.com/tx/${status.signature}`}
             target="_blank"
             rel="noopener noreferrer"
             style={{ color: "var(--text-muted)", textDecoration: "none" }}
@@ -171,6 +477,9 @@ export default function MarketplacePage() {
   const { ready, authenticated, login, logout, user } = usePrivy();
   const { wallets } = useWallets();
   const [sensorWallets, setSensorWallets] = useState<SensorWallet[]>([]);
+  const [trackingSensor, setTrackingSensor] = useState<SensorWallet | null>(
+    null,
+  );
 
   const walletAddress = user?.wallet?.address;
   const shortWallet = walletAddress ? shortAddress(walletAddress) : null;
@@ -382,6 +691,11 @@ export default function MarketplacePage() {
                         color: "var(--text-muted)",
                         whiteSpace: "nowrap",
                         marginLeft: "12px",
+                        cursor: "pointer",
+                      }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setTrackingSensor(sw);
                       }}
                     >
                       Track →
@@ -423,6 +737,13 @@ export default function MarketplacePage() {
           </div>
         )}
       </section>
+
+      {trackingSensor && (
+        <TrackDialog
+          sensorWallet={trackingSensor}
+          onClose={() => setTrackingSensor(null)}
+        />
+      )}
 
       {/* Footer */}
       <div style={{ borderTop: "1px solid var(--border)" }}>
