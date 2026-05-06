@@ -1,6 +1,6 @@
 # Demo Link
 
-[Insert Demo Link here](http://localhost:3000)
+(demo)[https://sensor-registry-ft3h.vercel.app/]
 
 # Integrations Disclaimer
 
