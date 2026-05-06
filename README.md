@@ -1,36 +1,58 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Sensors Marketplace — Tumbuh Network
+
+Onchain sensor registry for autonomous plants. Physical sensors publish readings to Solana by burning Unit Tokens. Sensor providers (manufacturers) and sensor wallets are registered publicly.
+
+## What it does
+
+- **Sensor Registry** — register a sensor wallet + mint address, browse all registered sensors
+- **Sensor Provider Registry** — link sensors to their manufacturers
+- **Burn-to-record** — sensors burn Unit Tokens to record readings onchain
+- **Data viewer** — inspect burn transactions + moisture readings per sensor via Dune Sim reports
+- **Wallet auth** — Privy embedded wallets (Solana)
+
+## Stack
+
+| Layer | Tech |
+|---|---|
+| Framework | Next.js 16 (App Router) |
+| Blockchain | Solana via `@solana/kit` |
+| Token ops | `@metaplex-foundation/umi` + `mpl-token-metadata` |
+| Auth | Privy (`@privy-io/react-auth`) |
+| DB | Postgres (`postgres`) |
+| Styling | Tailwind CSS v4 |
 
 ## Getting Started
 
-First, run the development server:
-
 ```bash
-npm run dev
-# or
-yarn dev
-# or
+pnpm install
 pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Key routes
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| Route | Description |
+|---|---|
+| `/` | Sensor Registry — register, browse, burn tokens |
+| `/providers` | Sensor Provider Registry |
+| `/api/sensors` | CRUD for sensor wallets |
+| `/api/wallets` | Registered wallet list |
+| `/api/transactions` | Burn tx history (paginated) |
 
-## Learn More
+## How sensor data works
 
-To learn more about Next.js, take a look at the following resources:
+1. Physical sensor wallet is registered onchain with a Unit Token mint
+2. Sensor reads data → burns equivalent Unit Tokens → transaction recorded on Solana
+3. [Dune Sim](https://sim.dune.com) queries burn history to generate sensor reports
+4. Autonomous plants consume reports to make decisions
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Env
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```
+# Privy
+NEXT_PUBLIC_PRIVY_APP_ID=
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+# Postgres
+DATABASE_URL=
+```
