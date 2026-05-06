@@ -7,6 +7,19 @@ import { RegisterSensorWallet } from "@/components/RegisterSensorWallet";
 import { burnTokens } from "@/lib/createSensorToken";
 import Link from "next/link";
 
+const DUMMY_TXN_HASH =
+  "5yofGT4WCDbtUcna345nPBjgCxzrLhWxQfxVesoTN8tcLPSt1ZZpBcnBLz4JRanK3SHGw5Xp4ESXcHyyYtVQbCcC";
+
+const BASE_TIMESTAMP_US = 1778066945000000;
+
+const DUMMY_READINGS: { block_time: number; moisture: number }[] = Array.from(
+  { length: 20 },
+  (_, i) => ({
+    block_time: BASE_TIMESTAMP_US + (i * (24 * 60 * 60 * 1000000)) / 20,
+    moisture: Math.round(30 + ((i * 37 + 11) % 71)),
+  }),
+);
+
 type SensorWallet = {
   id: number;
   wallet_address: string;
@@ -21,16 +34,16 @@ type BurnStatus =
   | { type: "success"; signature: string }
   | { type: "error"; message: string };
 
+type TrackDialogProps = {
+  sensorWallet: SensorWallet;
+  onClose: () => void;
+};
+
 type BurnTx = {
   signature: string;
   block_time: number;
   fee: number;
   burned: number | null;
-};
-
-type TrackDialogProps = {
-  sensorWallet: SensorWallet;
-  onClose: () => void;
 };
 
 function TrackDialog({ sensorWallet, onClose }: TrackDialogProps) {
@@ -94,7 +107,6 @@ function TrackDialog({ sensorWallet, onClose }: TrackDialogProps) {
     url.searchParams.set("address", sensorWallet.wallet_address);
     url.searchParams.set("limit", "20");
     if (offset) url.searchParams.set("offset", offset);
-
     const res = await fetch(url.toString());
     if (!res.ok) throw new Error(`API error ${res.status}`);
     return res.json() as Promise<{
@@ -106,7 +118,6 @@ function TrackDialog({ sensorWallet, onClose }: TrackDialogProps) {
   useEffect(() => {
     fetchTxs()
       .then((data) => {
-        console.log("data", data);
         setTxs(extractBurns(data.transactions));
         setNextOffset(data.next_offset ?? null);
       })
@@ -177,7 +188,7 @@ function TrackDialog({ sensorWallet, onClose }: TrackDialogProps) {
                 marginBottom: "4px",
               }}
             >
-              Burn Transactions · {sensorWallet.unit_symbol}
+              Sensor Data · {sensorWallet.unit_symbol}
             </p>
             <p
               style={{
@@ -207,6 +218,19 @@ function TrackDialog({ sensorWallet, onClose }: TrackDialogProps) {
 
         {/* Body */}
         <div style={{ overflowY: "auto", flex: 1, padding: "0" }}>
+          {/* Live burn transactions */}
+          <p
+            style={{
+              padding: "12px 24px 8px",
+              fontSize: "9px",
+              letterSpacing: "0.15em",
+              textTransform: "uppercase",
+              color: "var(--text-muted)",
+              borderBottom: "1px solid var(--border)",
+            }}
+          >
+            Burn Transactions (Onchain)
+          </p>
           {loading && (
             <p
               style={{
@@ -286,7 +310,54 @@ function TrackDialog({ sensorWallet, onClose }: TrackDialogProps) {
                   whiteSpace: "nowrap",
                 }}
               >
-                View →
+                Tx →
+              </a>
+            </div>
+          ))}
+
+          {/* Dummy moisture readings */}
+          {DUMMY_READINGS.map((reading, i) => (
+            <div
+              key={`dummy-${i}`}
+              style={{
+                padding: "14px 24px",
+                borderBottom: "1px solid var(--border)",
+                display: "grid",
+                gridTemplateColumns: "1fr auto",
+                gap: "8px",
+                alignItems: "center",
+              }}
+            >
+              <div>
+                <p
+                  style={{
+                    fontSize: "11px",
+                    fontFamily: "monospace",
+                    color: "var(--text-primary)",
+                    marginBottom: "3px",
+                  }}
+                >
+                  {new Date(reading.block_time / 1000).toLocaleString()} —{" "}
+                  <span style={{ color: "var(--text-secondary)" }}>
+                    {reading.moisture}% moisture
+                  </span>
+                </p>
+                <p style={{ fontSize: "10px", color: "var(--text-muted)" }}>
+                  {shortAddress(DUMMY_TXN_HASH)}
+                </p>
+              </div>
+              <a
+                href={`https://explorer.solana.com/tx/${DUMMY_TXN_HASH}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  fontSize: "10px",
+                  color: "var(--text-muted)",
+                  textDecoration: "none",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                Tx →
               </a>
             </div>
           ))}
@@ -530,7 +601,7 @@ export default function MarketplacePage() {
                 paddingBottom: "1px",
               }}
             >
-              Marketplace
+              Sensor Registry
             </Link>
             <Link
               href="/providers"
@@ -541,7 +612,7 @@ export default function MarketplacePage() {
                 textDecoration: "none",
               }}
             >
-              For Providers
+              Sensor Provider Registry
             </Link>
           </nav>
         </div>
@@ -575,15 +646,15 @@ export default function MarketplacePage() {
           className="text-xs tracking-widest uppercase mb-8"
           style={{ color: "var(--text-muted)", letterSpacing: "0.2em" }}
         >
-          Sensor Marketplace
+          Sensor Registry
         </p>
         <h1
           className="text-5xl font-light leading-tight"
           style={{ color: "var(--text-primary)", letterSpacing: "-0.02em" }}
         >
-          Autonomous Sensors on Tumbuh,
+          Autonomous plants need
           <br />
-          report plant data onchain.
+          periodic sensor data published on chain.
         </h1>
         <ul
           className="mt-6 text-base flex flex-col gap-6"
@@ -594,13 +665,28 @@ export default function MarketplacePage() {
           }}
         >
           <li>
-            Sensor providers manufacture sensors with a private wallet. Once
-            registered, sensors burn Unit Tokens to submit readings onchain.
+            All Physical sensors on Tumbuh Network are manufactured with a
+            wallet, and periodically publish their readings on chain. Each
+            sensor is needs to be linked with their Sensor Provider
+            (manufacturer) on this public registry in order to start publishing
+            data on chain.
           </li>
           <li>
-            Each sensor wallet is tied to a unit type — the token it will burn
-            when reporting data. You can also track a sensor using our favourite
-            tool.
+            We use{" "}
+            <a
+              href="https://sim.dune.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ color: "inherit", textDecoration: "underline" }}
+            >
+              Dune Sim
+            </a>{" "}
+            to generate reports on the sensor readings, which are then used by
+            autonomous plants to make decisions. <br />
+            <span className="opacity-80 text-sm">
+              (When a sensor takes a reading, it burns an equivalent amount of
+              Unit Tokens to record that data on Solana)
+            </span>
           </li>
         </ul>
       </section>
@@ -698,7 +784,7 @@ export default function MarketplacePage() {
                         setTrackingSensor(sw);
                       }}
                     >
-                      Track →
+                      View Data →
                     </span>
                   </div>
 
@@ -749,7 +835,7 @@ export default function MarketplacePage() {
       <div style={{ borderTop: "1px solid var(--border)" }}>
         <div className="px-8 py-6 flex items-center justify-between">
           <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-            Sensors Marketplace
+            Sensor Registry
           </p>
           <p className="text-xs" style={{ color: "var(--text-muted)" }}>
             Built on Solana

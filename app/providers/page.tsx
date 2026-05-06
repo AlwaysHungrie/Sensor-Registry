@@ -7,6 +7,9 @@ import { CreateSensorForm } from "@/components/CreateSensorForm";
 import { mintTokens } from "@/lib/createSensorToken";
 import Link from "next/link";
 
+const DUMMY_TXN_HASH =
+  "5yofGT4WCDbtUcna345nPBjgCxzrLhWxQfxVesoTN8tcLPSt1ZZpBcnBLz4JRanK3SHGw5Xp4ESXcHyyYtVQbCcC";
+
 type Sensor = {
   id: number;
   name: string;
@@ -272,7 +275,7 @@ export default function Home() {
                 textDecoration: "none",
               }}
             >
-              Marketplace
+              Sensor Registry
             </Link>
             <Link
               href="/providers"
@@ -285,7 +288,7 @@ export default function Home() {
                 paddingBottom: "1px",
               }}
             >
-              For Providers
+              Sensor Provider Registry
             </Link>
           </nav>
         </div>
@@ -319,7 +322,7 @@ export default function Home() {
           className="text-xs tracking-widest uppercase mb-8"
           style={{ color: "var(--text-muted)", letterSpacing: "0.2em" }}
         >
-          For Sensor Providers
+          Sensor Provider Registry
         </p>
         <h1
           className="text-5xl font-light leading-tight"
@@ -328,9 +331,9 @@ export default function Home() {
             letterSpacing: "-0.02em",
           }}
         >
-          Real-world sensors,
+          Register as a sensor provider.
           <br />
-          that power our Autonomous Plants.
+          Mint the token your sensors run on.
         </h1>
         <ul
           className="mt-6 text-base flex flex-col gap-6"
@@ -341,19 +344,14 @@ export default function Home() {
           }}
         >
           <li>
-            Autonomous Sensors on Tumbuh emit onchain data by regularly burning
-            Unit Tokens. Unit Tokens are controlled and sold by sensor providers
-            to the autonomous sensor wallets to let them work.
+            Sensor providers register here by minting a Unit Token — the onchain
+            currency their sensors use to report data. Each provider controls
+            their own token and distributes it to their sensor wallets.
           </li>
           <li>
-            As a sensor provider, you have complete control over distribution of
-            your sensor units and are responsible for ensuring your sensor
-            wallets have enough Unit Tokens to report data.
-          </li>
-          <li>
-            You need to ensure the sensor has a wallet and when it wants to
-            report a new reading, it does so by burning that amount of Unit
-            Tokens.
+            When a sensor takes a reading, it burns Unit Tokens to record that
+            data on Solana. As a provider, you are responsible for keeping your
+            sensor wallets funded with enough tokens to operate.
           </li>
         </ul>
       </section>
@@ -490,7 +488,7 @@ export default function Home() {
       <div style={{ borderTop: "1px solid var(--border)" }}>
         <div className="px-8 py-6 flex items-center justify-between">
           <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-            Sensors Marketplace
+            Sensor Provider Registry
           </p>
           <p className="text-xs" style={{ color: "var(--text-muted)" }}>
             Built on Solana
